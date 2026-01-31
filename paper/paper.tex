@@ -1,0 +1,276 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage[margin=1in]{geometry}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{lineno}
+\usepackage{setspace}
+
+% Line numbers for review
+\linenumbers
+\onehalfspacing
+
+% Hyperlink setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+% Title
+\title{Robust Hippocampal-Cortical Gamma Synchrony in Mouse Visual Processing: A Falsification-Forward Analysis of the Allen Visual Coding Dataset}
+
+\author{Julian Jocque\\
+\small Independent Researcher\\
+\small \href{mailto:julian@julianjocque.com}{julian@julianjocque.com}}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+% ============================================================================
+% ABSTRACT
+% ============================================================================
+
+\begin{abstract}
+Inter-regional gamma synchrony is proposed as a mechanism for neural binding, yet false positives from volume conduction and transient artifacts plague the literature. We present a falsification-forward pipeline combining weighted Phase Lag Index (wPLI), 5000-surrogate permutation testing, temporal replication across three independent segments, and Fisher's method for combining evidence. Applied to 49 sessions from the Allen Institute Visual Coding Neuropixels dataset with simultaneous hippocampal CA1 and primary visual cortex (VISp) recordings, 29 sessions (59.2\%) survive all falsification attempts (95\% CI: 45.2\%--71.8\%). Critically, the multiple falsification criteria work synergistically: wPLI control caught 4 likely volume conduction artifacts (8\% of sessions), while 15 sessions (31\%) showed no detectable synchrony. The pipeline demonstrates complete reproducibility: re-execution produces identical channel selections and survival classifications. These results suggest hippocampal-cortical gamma coupling is a robust and prevalent feature of visual processing rather than a rare occurrence. Code, channel specifications, and raw results are provided for independent verification at \url{https://github.com/[username]/schizago}.
+\end{abstract}
+
+\textbf{Keywords:} gamma oscillations, phase synchrony, hippocampus, visual cortex, volume conduction, wPLI, Allen Institute, reproducibility
+
+% ============================================================================
+% INTRODUCTION
+% ============================================================================
+
+\section{Introduction}
+
+The neural binding problem---how distributed processing across anatomically distinct brain regions gives rise to unified perceptual experience---remains one of the central questions in systems neuroscience \citep{singer1995visual,engel2001dynamic}. Among the proposed solutions, inter-regional synchronization in the gamma frequency band (30--80 Hz) has attracted substantial attention as a candidate mechanism for coordinating neural activity across distant areas \citep{fries2005mechanism,fries2015rhythms}.
+
+The hippocampus and visual cortex represent a particularly interesting case for studying long-range synchrony. The hippocampus, traditionally associated with memory formation and spatial navigation \citep{okeefe1978hippocampus,buzsaki2013memory}, receives visual information through both direct and indirect pathways. Gamma oscillations in both structures have been linked to sensory processing, memory encoding, and attentional selection \citep{colgin2016rhythms,buzsaki2012mechanisms}. Evidence for hippocampal-cortical gamma coupling during visual processing would support theories positing that the hippocampus plays an active role in ongoing perception, not merely in subsequent memory consolidation.
+
+However, the literature on inter-regional gamma synchrony is plagued by a fundamental methodological problem: volume conduction. Because neural signals propagate through the conductive medium of brain tissue, two electrodes may record correlated activity even in the absence of genuine neural coupling \citep{nunez1997eeg,bastos2015tutorial}. The Phase Locking Value (PLV), perhaps the most commonly used measure of inter-regional synchrony \citep{lachaux1999measuring}, is particularly susceptible to this artifact. Zero-phase-lag correlations---the hallmark of volume conduction---produce inflated PLV values indistinguishable from true synchrony.
+
+Several approaches have been proposed to address this limitation. The weighted Phase Lag Index (wPLI) weights contributions by the magnitude of the imaginary component of the cross-spectrum, effectively down-weighting zero-lag correlations \citep{vinck2011improved}. Surrogate testing provides a statistical framework for assessing whether observed synchrony exceeds chance levels \citep{theiler1992testing,prichard1994generating}. Yet these methods are often applied in isolation or with insufficient rigor (e.g., 100--500 surrogates), potentially allowing false positives to persist.
+
+We propose a falsification-forward approach to synchrony analysis. Rather than seeking to confirm the presence of synchrony, we design a pipeline explicitly intended to reject spurious findings. The pipeline combines multiple falsification criteria: (1) wPLI as a volume-conduction-resistant metric, (2) permutation testing against 5000 phase-randomized surrogates, (3) temporal replication across three independent 60-second segments, and (4) Fisher's method for combining evidence across segments \citep{fisher1925statistical}. A session survives only if it passes all criteria.
+
+We apply this pipeline to the Allen Institute Visual Coding Neuropixels dataset \citep{allen2019visual,siegle2021survey}, which provides standardized, high-quality recordings from multiple brain regions in head-fixed mice viewing visual stimuli. We focus on sessions with simultaneous coverage of hippocampal CA1 and primary visual cortex (VISp), asking: what fraction of sessions exhibit hippocampal-cortical gamma synchrony that survives rigorous falsification?
+
+% ============================================================================
+% METHODS
+% ============================================================================
+
+\section{Methods}
+
+\subsection{Dataset}
+
+We analyzed data from the Allen Institute Visual Coding Neuropixels dataset \citep{allen2019visual,siegle2021survey}, a publicly available resource providing high-density electrophysiological recordings from mice viewing visual stimuli. Recordings were obtained using Neuropixels probes \citep{jun2017fully}, which sample local field potentials (LFP) at 1250 Hz across hundreds of channels spanning multiple brain regions.
+
+Inclusion criterion: sessions with simultaneous LFP coverage of both hippocampal CA1 and primary visual cortex (VISp). Of the full dataset, 50 sessions met this criterion. One session (839557629) was excluded due to data loading failure, yielding a final sample of 49 sessions.
+
+For each session, we extracted 180 seconds of continuous LFP data, beginning at recording onset. This duration was divided into three 60-second segments for temporal replication analysis.
+
+\subsection{Channel Selection}
+
+For each session, we selected one channel from CA1 and one from VISp. Channels were identified by their structure labels in the Allen Institute metadata. From the available channels in each region, we selected the middle channel (by index order within the LFP data structure). This deterministic selection ensures reproducibility while sampling from the central portion of the recorded region.
+
+All selected channel IDs and probe IDs were logged and are provided in the supplementary materials. Re-execution of the analysis code produces identical channel selections.
+
+\subsection{Signal Processing}
+
+LFP signals were bandpass filtered to the gamma range (30--80 Hz) using a 4th-order Butterworth filter applied bidirectionally (zero-phase filtering via \texttt{scipy.signal.sosfiltfilt}). Instantaneous phase was extracted via the Hilbert transform \citep{gabor1946theory}.
+
+\subsection{Synchrony Metrics}
+
+\textbf{Phase Locking Value (PLV):} The PLV quantifies the consistency of phase differences between two signals across time \citep{lachaux1999measuring}. For phase time series $\phi_1(t)$ and $\phi_2(t)$:
+\begin{equation}
+\text{PLV} = \left| \langle e^{i(\phi_1 - \phi_2)} \rangle \right|
+\end{equation}
+where $\langle \cdot \rangle$ denotes temporal averaging. PLV ranges from 0 (no phase consistency) to 1 (perfect phase locking). PLV is sensitive to volume conduction artifacts.
+
+\textbf{Weighted Phase Lag Index (wPLI):} The wPLI addresses volume conduction by focusing on non-zero phase lags \citep{vinck2011improved}. It is computed from the cross-spectrum $S_{12}$ as:
+\begin{equation}
+\text{wPLI} = \frac{|\langle |\text{Im}(S_{12})| \cdot \text{sign}(\text{Im}(S_{12})) \rangle|}{\langle |\text{Im}(S_{12})| \rangle}
+\end{equation}
+By weighting contributions by the magnitude of the imaginary component, wPLI down-weights zero-lag correlations. wPLI ranges from 0 to 1.
+
+\subsection{Surrogate Testing}
+
+To assess statistical significance, we compared observed synchrony values against null distributions generated by phase randomization \citep{theiler1992testing}. For each surrogate, we computed the FFT of the CA1 signal, randomized phase angles uniformly on $[0, 2\pi]$ while preserving amplitude spectra, and reconstructed a surrogate signal via inverse FFT. We then computed PLV and wPLI between the surrogate CA1 and the original VISp signal.
+
+We generated 5000 surrogates per segment, substantially exceeding the 100--1000 surrogates typical in the literature. The p-value was computed as:
+\begin{equation}
+p = \frac{1 + k}{1 + N}
+\end{equation}
+where $k$ is the number of surrogates with values $\geq$ the observed value and $N = 5000$. This formulation avoids $p = 0$ and provides a conservative estimate \citep{phipson2010permutation}.
+
+\subsection{Temporal Replication}
+
+Each 180-second recording was divided into three non-overlapping 60-second segments. Synchrony metrics and surrogate testing were computed independently for each segment. This temporal replication guards against transient artifacts or non-stationary synchrony.
+
+\subsection{Combined Evidence}
+
+P-values from the three segments were combined using Fisher's method \citep{fisher1925statistical}:
+\begin{equation}
+\chi^2 = -2 \sum_{i=1}^{k} \ln(p_i)
+\end{equation}
+Under the null hypothesis of no true effect, this statistic follows a chi-squared distribution with $2k$ degrees of freedom ($k = 3$ segments). Combined p-values were computed for both PLV and wPLI.
+
+\subsection{Survival Criteria}
+
+A session was classified as surviving if it met \textbf{all} of the following criteria:
+\begin{enumerate}
+    \item Combined PLV p-value $< 0.05$
+    \item Combined wPLI p-value $< 0.05$
+    \item At least 2 of 3 segments individually passed both PLV and wPLI (segment $p < 0.05$ for each)
+\end{enumerate}
+
+The wPLI criterion guards against volume conduction. The segment replication criterion ($\geq$2/3 passing) guards against transient artifacts. Together, these criteria implement a falsification-forward approach: we require multiple independent lines of evidence before accepting synchrony as genuine.
+
+\subsection{Reproducibility}
+
+All analyses used a fixed random seed (7829) with session-specific offsets to ensure independent but reproducible randomization across sessions. Channel IDs, probe IDs, observed values, p-values, and survival classifications were logged for each session. Complete re-execution of the pipeline produces identical results.
+
+% ============================================================================
+% RESULTS
+% ============================================================================
+
+\section{Results}
+
+\subsection{Survival Rate}
+
+Of 49 sessions analyzed, 29 (59.2\%) survived all falsification criteria. The 95\% Wilson confidence interval for this proportion is [45.2\%, 71.8\%]. This prevalence substantially exceeds what would be expected if hippocampal-cortical gamma synchrony were rare or artifactual.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/figure1_pipeline.png}
+    \caption{\textbf{Falsification-forward analysis pipeline.} Raw LFP from CA1 and VISp undergoes gamma bandpass filtering, PLV/wPLI computation per 60-second segment, surrogate testing against 5000 phase-randomized signals, and evidence combination via Fisher's method. Sessions survive only if they pass all criteria.}
+    \label{fig:pipeline}
+\end{figure}
+
+\subsection{Failure Mode Analysis}
+
+The 20 sessions that failed falsification exhibited distinct patterns (Figure~\ref{fig:breakdown}):
+
+\textbf{Volume conduction artifacts (4 sessions, 20\% of failures):} These sessions showed significant combined PLV ($p < 0.05$) but non-significant wPLI ($p \geq 0.05$). This pattern is the hallmark of spurious synchrony driven by zero-phase-lag correlations. Without the wPLI criterion, these would have been classified as showing genuine coupling.
+
+\textbf{No detectable synchrony (15 sessions, 75\% of failures):} These sessions showed non-significant combined p-values for both metrics, indicating absence of detectable phase coupling between CA1 and VISp.
+
+\textbf{Unusual pattern (1 session, 5\% of failures):} One session showed significant wPLI but non-significant PLV, an atypical pattern potentially reflecting genuine but weak non-zero-lag coupling.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/figure2_survival_breakdown.png}
+    \caption{\textbf{Session classification by falsification criteria.} Of 49 sessions, 29 (59\%) survived all criteria. Among failures, 4 were caught by wPLI control (volume conduction), 15 showed no detectable synchrony, and 1 showed an unusual pattern.}
+    \label{fig:breakdown}
+\end{figure}
+
+\subsection{Characteristics of Survivors}
+
+Sessions surviving falsification exhibited strong statistical evidence against the null hypothesis. Combined wPLI p-values ranged from $2.82 \times 10^{-9}$ to $1.80 \times 10^{-4}$, with 19 of 29 survivors (66\%) showing the minimum possible p-value ($2.82 \times 10^{-9}$, the floor set by Fisher's method with 5000 surrogates).
+
+Observed wPLI values in survivors ranged from 0.038 to 0.531 (mean: 0.220, SD: 0.124). For comparison, non-survivors showed substantially lower wPLI values (mean: 0.038, SD: 0.030), confirming that survival reflects genuinely stronger phase coupling rather than statistical fluctuation (Figure~\ref{fig:wpli_dist}).
+
+Temporal consistency was high among survivors: 25 of 29 (86\%) showed all three segments passing both criteria, while the remaining 4 showed 2 of 3 segments passing (Figure~\ref{fig:segments}).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/figure5_wpli_distribution.png}
+    \caption{\textbf{Distribution of observed wPLI values.} Survivors show substantially higher wPLI (mean = 0.220) compared to non-survivors (mean = 0.038), confirming that survival reflects stronger phase coupling.}
+    \label{fig:wpli_dist}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/figure4_plv_vs_wpli.png}
+    \caption{\textbf{PLV vs wPLI scatter plot (volume conduction diagnostic).} Green points (survivors) cluster above the unity line, indicating non-zero-lag coupling. Red points (non-survivors) cluster in the lower-left (no synchrony) or lower-right (high PLV, low wPLI = volume conduction).}
+    \label{fig:plv_wpli}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/figure6_segment_consistency.png}
+    \caption{\textbf{Temporal replication consistency.} Survivors show high consistency across segments (25/29 with 3/3 passing), while non-survivors show poor consistency (11 with 0/3, 9 with 1/3).}
+    \label{fig:segments}
+\end{figure}
+
+\subsection{Reproducibility Verification}
+
+To verify reproducibility, we re-executed the complete analysis pipeline. The re-run produced identical results: the same 29 sessions survived, the same 20 failed, and all numerical values (observed metrics, p-values) matched exactly. Channel selection was deterministic, with zero mismatches between runs.
+
+Additionally, we tested seed robustness by analyzing two confirmed survivors (sessions 794812542 and 829720705) with five different random seeds. Both sessions survived with all five seeds, with all 30 segment-level tests (2 sessions $\times$ 5 seeds $\times$ 3 segments) showing $p = 0.0002$ (the surrogate floor).
+
+% ============================================================================
+% DISCUSSION
+% ============================================================================
+
+\section{Discussion}
+
+\subsection{Interpretation}
+
+The central finding of this study is that hippocampal-cortical gamma synchrony, measured with volume-conduction-resistant methods and subjected to rigorous falsification criteria, is prevalent in the Allen Visual Coding dataset. Nearly 60\% of sessions with simultaneous CA1 and VISp coverage exhibit robust gamma coupling that survives wPLI controls, 5000-surrogate permutation testing, and temporal replication.
+
+This prevalence argues against interpreting hippocampal-cortical gamma synchrony as a rare phenomenon requiring special circumstances. Rather, it appears to be a common feature of neural activity during visual processing in head-fixed mice. This is consistent with theories positing that the hippocampus participates in ongoing perception, not only in subsequent memory encoding \citep{moscovitch2016episodic}.
+
+\subsection{The Value of wPLI Control}
+
+The wPLI criterion caught 4 sessions (8\%) that would have been false positives based on PLV alone---the classic volume conduction artifact. These sessions showed significant phase locking when measured by PLV, but this apparent coupling was driven by zero-lag correlations that wPLI correctly identified as non-genuine.
+
+Figure~\ref{fig:plv_wpli} provides a visual diagnostic: points in the lower-right region (high PLV, low wPLI) represent likely volume conduction. The clear separation between survivors (green, above unity line) and non-survivors (red, clustered low) validates this approach.
+
+\subsection{Relation to Prior Work}
+
+Our finding of prevalent hippocampal-cortical gamma synchrony is consistent with prior work suggesting hippocampal involvement in visual processing \citep{nobre1995language,lisman2009prediction}. Gamma oscillations have been proposed as a mechanism for binding distributed representations \citep{singer1999neuronal}, and our results suggest this mechanism operates commonly during passive visual processing.
+
+The 59\% prevalence is higher than some prior estimates, which may reflect differences in criteria stringency, recording quality, or species/paradigm differences. Importantly, our estimate comes with explicit falsification criteria that allow direct comparison with future work using similar methodology.
+
+\subsection{Limitations}
+
+Several limitations warrant acknowledgment. First, channel selection (middle channel by index) is arbitrary. Different channels within the same region may yield different results, and we have not systematically explored this variability. Second, our analysis focused on passive visual processing in head-fixed mice; results may not generalize to active behavior or other species. Third, we cannot infer directionality or causality from synchrony measures alone---the presence of coupling does not indicate which region drives which, or whether coupling is functionally relevant.
+
+\subsection{Future Directions}
+
+Several extensions merit investigation. Systematic sampling across cortical depth and hippocampal layers could reveal layer-specific coupling patterns. Directionality analysis via Granger causality or transfer entropy could address whether hippocampal activity drives cortical responses or vice versa. Phase-amplitude coupling analysis could test whether hippocampal theta phase modulates cortical gamma amplitude \citep{tort2009theta}. Finally, correlation with behavioral variables could reveal state-dependent modulation of coupling strength.
+
+% ============================================================================
+% CONCLUSION
+% ============================================================================
+
+\section{Conclusion}
+
+We have demonstrated that hippocampal-cortical gamma synchrony, when measured with volume-conduction-resistant methods and subjected to rigorous multi-criteria falsification, is prevalent in the Allen Visual Coding dataset. The 59\% survival rate across 49 sessions suggests this coupling is a robust feature of visual processing rather than a rare or artifactual phenomenon. Our fully reproducible pipeline provides a template for falsification-forward synchrony analysis applicable to other datasets and brain region pairs. Code, channel specifications, and complete results are provided at \url{https://github.com/[username]/schizago}.
+
+% ============================================================================
+% DATA AVAILABILITY
+% ============================================================================
+
+\section*{Data Availability}
+
+The Allen Institute Visual Coding Neuropixels dataset is publicly available at \url{https://portal.brain-map.org/explore/circuits/visual-coding-neuropixels}. Analysis code is available at \url{https://github.com/[username]/schizago} with DOI: [Zenodo DOI]. Complete results, including all session-level data and channel IDs, are provided in the repository.
+
+% ============================================================================
+% ACKNOWLEDGMENTS
+% ============================================================================
+
+\section*{Acknowledgments}
+
+We thank the Allen Institute for Brain Science for making the Visual Coding Neuropixels dataset publicly available. This work was conducted independently without external funding.
+
+% ============================================================================
+% REFERENCES
+% ============================================================================
+
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}
